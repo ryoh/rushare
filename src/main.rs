@@ -1,3 +1,4 @@
+use anyhow::Result;
 use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
@@ -7,7 +8,12 @@ struct Opt {
     mount: bool
 }
 
-fn main() {
+fn main() -> Result<()> {
     let opt = Opt::from_args();
-    println!("{:?}", opt);
+
+    if opt.mount {
+        println!("mount option true");
+    }
+
+    Ok(())
 }
