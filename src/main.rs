@@ -26,11 +26,11 @@ struct Opt {
 
 fn main() -> Result<()> {
     let opt = Opt::from_args();
-    let mut clone_flag: CloneFlags = CloneFlags::empty();
+    let mut unshare_flags: CloneFlags = CloneFlags::empty();
 
     // parse command arguments
     if opt.mount {
-        clone_flag |= CloneFlags::CLONE_NEWNS;
+        unshare_flags |= CloneFlags::CLONE_NEWNS;
     }
 
     if opt.fork {
@@ -50,7 +50,7 @@ fn main() -> Result<()> {
 
 
     // unshare and run command
-    unshare(clone_flag)?;
+    unshare(unshare_flags)?;
 
     execvp(&path, &argv)?;
     
