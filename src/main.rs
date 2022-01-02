@@ -1,5 +1,8 @@
+use std::ffi::CString;
+
 use anyhow::Result;
-use nix::sched::CloneFlags;
+use nix::sched::{CloneFlags, unshare};
+use nix::unistd::execvp;
 use structopt::{clap, StructOpt};
 
 #[derive(Debug, StructOpt)]
@@ -14,8 +17,10 @@ struct Opt {
     #[structopt(short, long, help = "fork before launching <program>")]
     fork: bool,
 
+    #[structopt(name="program")]
     prog: String,
 
+    #[structopt(name="arguments")]
     args: Vec<String>,
 }
 
@@ -23,6 +28,7 @@ fn main() -> Result<()> {
     let opt = Opt::from_args();
     let mut clone_flag: CloneFlags = CloneFlags::empty();
 
+    // parse command arguments
     if opt.mount {
         clone_flag |= CloneFlags::CLONE_NEWNS;
     }
@@ -31,7 +37,23 @@ fn main() -> Result<()> {
         println!("forked!!");
     }
 
-    println!("{:?}, {:?}", opt, clone_flag);
+    // command building
+    let path = match opt.prog.as_str() {
+        "" => CString::new("/bin/sh")?,
+        _ => CString::new(opt.prog)?,
+    };
+
+    let mut argv: Vec<CString> = opt.args.iter()
+        .map(|s| CString::new(s.as_str()).expect("CString::new error"))
+        .collect();
+    argv.insert(0, path.clone());
+
+
+    // unshare and run command
+    unshare(clone_flag)?;
+
+    execvp(&path, &argv)?;
+    
 
     Ok(())
 }
