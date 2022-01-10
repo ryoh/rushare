@@ -1,7 +1,6 @@
 use std::ffi::CString;
-use std::process::exit;
 
-use anyhow::Result;
+use anyhow::{Result, Context};
 use std::env;
 use nix::sched::{CloneFlags, unshare};
 use nix::sys::signal::{self, signal};
@@ -47,7 +46,11 @@ struct Opt {
 
 fn main() -> Result<()> {
     // Get program name
-    let progname = std::env::current_exe()?.file_name().unwrap_or_default().to_string_lossy().into_owned();
+    let progname = std::env::current_exe()?
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned();
     // Get commandline arguments
     let opt = Opt::from_args();
     let mut unshare_flags: CloneFlags = CloneFlags::empty();
@@ -81,6 +84,9 @@ fn main() -> Result<()> {
         unshare_flags |= CloneFlags::CLONE_NEWCGROUP;
     }
 
+    // To immutable
+    let unshare_flags = unshare_flags;
+
     if opt.fork {
         println!("forked!!");
     }
@@ -103,16 +109,10 @@ fn main() -> Result<()> {
     unsafe { signal(signal::SIGCHLD, signal::SigHandler::SigDfl) }?;
 
     // unshare
-    if let Err(e) = unshare(unshare_flags) {
-        eprintln!("{}: unshare failed: {}", progname, &e);
-        exit(1);
-    }
+    unshare(unshare_flags).with_context(|| format!("{}: unshare failed", progname))?;
 
     // execvp
-    if let Err(e) = execvp(&path, &argv) {
-        eprintln!("{}: execvp failed: {}", progname, &e);
-        exit(1);
-    }
+    execvp(&path, &argv).with_context(|| format!("{}: execvp failed", progname))?;
     
 
     Ok(())
