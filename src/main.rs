@@ -108,8 +108,11 @@ fn main() -> Result<()> {
         exit(1);
     }
 
-    // exec
-    execvp(&path, &argv).expect("execvp failed");
+    // execvp
+    if let Err(e) = execvp(&path, &argv) {
+        eprintln!("{}: execvp failed: {}", progname, &e);
+        exit(1);
+    }
     
 
     Ok(())
