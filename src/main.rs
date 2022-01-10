@@ -1,10 +1,12 @@
 use std::ffi::CString;
+use std::process::exit;
+use std::env;
 
 use anyhow::{Result, Context};
-use std::env;
 use nix::sched::{CloneFlags, unshare};
-use nix::sys::signal::{self, signal};
-use nix::unistd::execvp;
+use nix::unistd::{execvp, fork, getpid, getppid, ForkResult};
+use nix::sys::signal::{self, signal, kill};
+use nix::sys::wait::{waitpid, WaitStatus};
 use structopt::{clap, StructOpt};
 
 #[derive(Debug, StructOpt)]
@@ -87,10 +89,6 @@ fn main() -> Result<()> {
     // To immutable
     let unshare_flags = unshare_flags;
 
-    if opt.fork {
-        println!("forked!!");
-    }
-
     // command building
     let path = match opt.prog {
         // Case no value
@@ -110,6 +108,36 @@ fn main() -> Result<()> {
 
     // unshare
     unshare(unshare_flags).with_context(|| format!("{}: unshare failed", progname))?;
+
+    // fork
+    if opt.fork {
+        unsafe{ signal(signal::SIGINT, signal::SigHandler::SigIgn) }?;
+        unsafe{ signal(signal::SIGTERM, signal::SigHandler::SigIgn) }?;
+
+        match unsafe{ fork().with_context(|| format!("{}: fork failed", progname))? } {
+            ForkResult::Parent { child } => {
+                println!("Main({}) forked a child({})", getpid(), child);
+                match waitpid(child, None).with_context(|| format!("{}: waitpid failed", progname))? {
+                    WaitStatus::Exited(pid, status) => {
+                        println!("pid: {}, status: {}, exit", pid, status);
+                        exit(0);
+                    }
+                    WaitStatus::Signaled(pid, status, _) => {
+                        println!("pid: {}, status: {}, signal received", pid, status);
+                        kill(getpid(), signal::SIGTERM)?;
+                        exit(1);
+                    }
+                    _ => {
+                        eprintln!("child exit failed");
+                        exit(1);
+                    }
+                }
+            }
+            ForkResult::Child => {
+                println!("Child({}) started. PPID is {}", getpid(), getppid());
+            }
+        }
+    }
 
     // execvp
     execvp(&path, &argv).with_context(|| format!("{}: execvp failed", progname))?;
