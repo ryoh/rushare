@@ -92,10 +92,11 @@ fn main() -> Result<()> {
     // command building
     let path = match opt.prog {
         // Case no value
-        None => CString::new(env::var("SHELL").unwrap_or("/bin/sh".to_string()))?,
+        None => env::var("SHELL").unwrap_or("/bin/sh".to_string()),
         // Case program value exists
-        Some(prog) => CString::new(prog)?,
+        Some(prog) => prog,
     };
+    let path = CString::new(path).expect("CString::new error");
 
     let mut argv: Vec<CString> = opt.args.iter()
         .map(|s| CString::new(s.as_str()).expect("CString::new error"))
