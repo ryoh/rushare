@@ -2,6 +2,7 @@ use std::ffi::CString;
 
 use anyhow::Result;
 use nix::sched::{CloneFlags, unshare};
+use nix::sys::signal::{self, signal};
 use nix::unistd::execvp;
 use structopt::{clap, StructOpt};
 
@@ -50,6 +51,8 @@ fn main() -> Result<()> {
 
 
     // unshare and run command
+    unsafe { signal(signal::SIGCHLD, signal::SigHandler::SigDfl) }?;
+
     unshare(unshare_flags)?;
 
     execvp(&path, &argv)?;
