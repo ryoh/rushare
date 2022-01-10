@@ -1,6 +1,8 @@
 use std::ffi::CString;
+use std::process::exit;
 
 use anyhow::Result;
+use std::env;
 use nix::sched::{CloneFlags, unshare};
 use nix::sys::signal::{self, signal};
 use nix::unistd::execvp;
@@ -36,14 +38,17 @@ struct Opt {
     #[structopt(short, long, help = "fork before launching <program>")]
     fork: bool,
 
-    #[structopt(name="program", default_value = "")]
-    prog: String,
+    #[structopt(name="program")]
+    prog: Option<String>,
 
     #[structopt(name="arguments")]
     args: Vec<String>,
 }
 
 fn main() -> Result<()> {
+    // Get program name
+    let progname = std::env::current_exe()?.file_name().unwrap_or_default().to_string_lossy().into_owned();
+    // Get commandline arguments
     let opt = Opt::from_args();
     let mut unshare_flags: CloneFlags = CloneFlags::empty();
 
@@ -81,9 +86,11 @@ fn main() -> Result<()> {
     }
 
     // command building
-    let path = match opt.prog.as_str() {
-        "" => CString::new(std::env::var("SHELL").unwrap_or("/bin/sh".to_string()))?,
-        _ => CString::new(opt.prog.clone())?,
+    let path = match opt.prog {
+        // Case no value
+        None => CString::new(env::var("SHELL").unwrap_or("/bin/sh".to_string()))?,
+        // Case program value exists
+        Some(prog) => CString::new(prog)?,
     };
 
     let mut argv: Vec<CString> = opt.args.iter()
@@ -96,7 +103,10 @@ fn main() -> Result<()> {
     unsafe { signal(signal::SIGCHLD, signal::SigHandler::SigDfl) }?;
 
     // unshare
-    unshare(unshare_flags).expect("unshare failed");
+    if let Err(e) = unshare(unshare_flags) {
+        eprintln!("{}: unshare failed: {}", progname, &e);
+        exit(1);
+    }
 
     // exec
     execvp(&path, &argv).expect("execvp failed");
