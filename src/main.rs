@@ -119,11 +119,11 @@ fn main() -> Result<()> {
                 println!("Main({}) forked a child({})", getpid(), child);
                 match waitpid(child, None).with_context(|| format!("{}: waitpid failed", progname))? {
                     WaitStatus::Exited(pid, status) => {
-                        println!("pid: {}, status: {}, exit", pid, status);
+                        println!("exit success. (pid: {}, status: {})", pid, status);
                         exit(0);
                     }
                     WaitStatus::Signaled(pid, status, _) => {
-                        println!("pid: {}, status: {}, signal received", pid, status);
+                        println!("terminate. (pid: {}, status: {})", pid, status);
                         kill(getpid(), signal::SIGTERM)?;
                         exit(1);
                     }
