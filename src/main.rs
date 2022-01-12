@@ -3,8 +3,9 @@ use std::process::exit;
 use std::env;
 
 use anyhow::{Result, Context};
+use nix::libc::{EXIT_FAILURE};
 use nix::sched::{CloneFlags, unshare};
-use nix::unistd::{execvp, fork, getpid, getppid, ForkResult};
+use nix::unistd::{execvp, fork, ForkResult};
 use nix::sys::signal::{self, signal, kill};
 use nix::sys::wait::{waitpid, WaitStatus};
 use structopt::{clap, StructOpt};
@@ -117,25 +118,26 @@ fn main() -> Result<()> {
 
         match unsafe{ fork().with_context(|| format!("{}: fork failed", progname))? } {
             ForkResult::Parent { child } => {
-                println!("Main({}) forked a child({})", getpid(), child);
-                match waitpid(child, None).with_context(|| format!("{}: waitpid failed", progname))? {
-                    WaitStatus::Exited(pid, status) => {
-                        println!("exit success. (pid: {}, status: {})", pid, status);
-                        exit(0);
+                let status = waitpid(child, None).with_context(|| format!("{}: waitpid failed", progname))?;
+
+                unsafe{ signal(signal::SIGINT, signal::SigHandler::SigDfl) }?;
+                unsafe{ signal(signal::SIGTERM, signal::SigHandler::SigDfl) }?;
+
+                match status {
+                    WaitStatus::Exited(_pid, status) => {
+                        exit(status);
                     }
-                    WaitStatus::Signaled(pid, status, _) => {
-                        println!("terminate. (pid: {}, status: {})", pid, status);
-                        kill(getpid(), signal::SIGTERM)?;
-                        exit(1);
+                    WaitStatus::Signaled(pid, signal, _) => {
+                        kill(pid, signal)?;
                     }
                     _ => {
                         eprintln!("child exit failed");
-                        exit(1);
                     }
                 }
+                exit(EXIT_FAILURE);
             }
             ForkResult::Child => {
-                println!("Child({}) started. PPID is {}", getpid(), getppid());
+                println!("forked.");
             }
         }
     }
