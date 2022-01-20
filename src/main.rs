@@ -8,6 +8,7 @@ use nix::sched::{CloneFlags, unshare};
 use nix::unistd::{execvp, fork, ForkResult};
 use nix::sys::signal::{self, signal, kill};
 use nix::sys::wait::{waitpid, WaitStatus};
+use nix::mount::{mount, MsFlags};
 use structopt::{clap, StructOpt};
 
 #[derive(Debug, StructOpt)]
@@ -39,6 +40,9 @@ struct Opt {
 
     #[structopt(short, long, help = "fork before launching <program>")]
     fork: bool,
+
+    #[structopt(long, help = "mount proc filesystem first (implies --mount)")]
+    mount_proc: bool,
 
     #[structopt(name="program")]
     prog: Option<String>,
@@ -87,6 +91,10 @@ fn main() -> Result<()> {
         unshare_flags |= CloneFlags::CLONE_NEWCGROUP;
     }
 
+    if opt.mount_proc {
+        unshare_flags |= CloneFlags::CLONE_NEWNS;
+    }
+
     // To immutable
     let unshare_flags = unshare_flags;
 
@@ -110,6 +118,14 @@ fn main() -> Result<()> {
 
     // unshare
     unshare(unshare_flags).with_context(|| format!("{}: unshare failed", progname))?;
+
+    // change propagation
+    mount::<str, str, str, str>(None, "/", None, MsFlags::MS_PRIVATE | MsFlags::MS_REC, None)
+        .with_context(|| format!("{}: change propagation failed", progname))?;
+
+    // proc mount
+    mount::<str, str, str, str>(Some("proc"), "/proc", Some("proc"), MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC | MsFlags::MS_NODEV | MsFlags::MS_NOATIME, None)
+        .with_context(|| format!("{}: proc remount failed", progname))?;
 
     // fork
     if opt.fork {
