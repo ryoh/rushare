@@ -119,14 +119,6 @@ fn main() -> Result<()> {
     // unshare
     unshare(unshare_flags).with_context(|| format!("{}: unshare failed", progname))?;
 
-    // change propagation
-    mount::<str, str, str, str>(None, "/", None, MsFlags::MS_PRIVATE | MsFlags::MS_REC, None)
-        .with_context(|| format!("{}: change propagation failed", progname))?;
-
-    // proc mount
-    mount::<str, str, str, str>(Some("proc"), "/proc", Some("proc"), MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC | MsFlags::MS_NODEV | MsFlags::MS_NOATIME, None)
-        .with_context(|| format!("{}: proc remount failed", progname))?;
-
     // fork
     if opt.fork {
         unsafe{ signal(signal::SIGINT, signal::SigHandler::SigIgn) }?;
@@ -156,6 +148,18 @@ fn main() -> Result<()> {
                 println!("forked.");
             }
         }
+    }
+
+    if opt.mount {
+        // change propagation
+        mount::<str, str, str, str>(None, "/", None, MsFlags::MS_PRIVATE | MsFlags::MS_REC, None)
+            .with_context(|| format!("{}: change propagation failed", progname))?;
+    }
+
+    if opt.mount_proc {
+        // proc mount
+        mount::<str, str, str, str>(Some("proc"), "/proc", Some("proc"), MsFlags::MS_NOSUID | MsFlags::MS_NOEXEC | MsFlags::MS_NODEV | MsFlags::MS_NOATIME, None)
+            .with_context(|| format!("{}: proc remount failed", progname))?;
     }
 
     // execvp
